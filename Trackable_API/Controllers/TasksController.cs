@@ -44,24 +44,12 @@ namespace Trackable_API.Controllers
         }
 
         [HttpPost]
-        [Consumes("application/json")]
-        public async Task<string> PostTask()
+        public async void PostTask()
         {
-            using(var reader = new StreamReader(
-                Request.Body,
-                encoding: Encoding.UTF8,
-                detectEncodingFromByteOrderMarks: false
-                ))
-            {
-                var bodyString = await reader.ReadToEndAsync();
 
-                var task = JsonConvert.DeserializeObject<Models.Task>(bodyString);
+           var task = await HttpContext.Request.ReadFromJsonAsync<Models.Task>();
 
-                SqlCreateTask(task.Name, task.Message, task.Status, task.Type, task.Trace);
-
-                return (bodyString);
-
-            }
+           SqlCreateTask(task);
 
         }
 
@@ -73,12 +61,16 @@ namespace Trackable_API.Controllers
             return NoContent();
         }
 
-        private void SqlCreateTask(string name, string message, string status, string type, string trace)
+        private void SqlCreateTask(Models.Task task)
         {
+            string name = task.Name;
+            string message = task.Message;
+            string status = task.Status;
+            string type = task.Type;
+            string trace = task.Trace;
+
             using (var connection = new SqlConnection(_configuration.GetConnectionString("TaskDatabase")))
             {
-                Models.Task task = null;
-
                 var sql = "INSERT INTO task (name, message, status, type, trace) VALUES (@name, @message, @status, @type, @trace)";
                 using (SqlCommand command = new SqlCommand(sql))
                 {
