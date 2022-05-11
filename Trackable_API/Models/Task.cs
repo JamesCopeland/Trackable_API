@@ -2,8 +2,8 @@
 {
     public class Task
     {
-        public long Id { get; set; }
-        public string? Name { get; set; }
+        public int TaskId { get; set; }
+        public string Name { get; set; }
         public string? Message { get; set; }
         public string? Status { get; set; }
         public string? Type { get; set; }

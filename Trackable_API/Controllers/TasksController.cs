@@ -1,12 +1,10 @@
-﻿#nullable disable
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Data.SqlClient;
 using System.Linq;
-using System.Text;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
+using Microsoft.EntityFrameworkCore;
 using Trackable_API.Models;
 
 namespace Trackable_API.Controllers
@@ -15,148 +13,111 @@ namespace Trackable_API.Controllers
     [ApiController]
     public class TasksController : ControllerBase
     {
-        private readonly IConfiguration _configuration;
+        private readonly TaskContext _context;
 
-        public TasksController(IConfiguration configuration)
+        public TasksController(TaskContext context)
         {
-            _configuration = configuration;
+            _context = context;
         }
 
         // GET: api/Tasks
         [HttpGet]
-        public IEnumerable<Models.Task> Get()
+        public async Task<ActionResult<IEnumerable<Models.Task>>> GetTasks()
         {
-            return SqlGetTasks();
+          if (_context.Tasks == null)
+          {
+              return NotFound();
+          }
+            return await _context.Tasks.ToListAsync();
         }
 
         // GET: api/Tasks/5
         [HttpGet("{id}")]
-        public Models.Task GetTask(long id)
+        public async Task<ActionResult<Models.Task>> GetTask(int id)
         {
-            var task = SqlGetTask(id);
+          if (_context.Tasks == null)
+          {
+              return NotFound();
+          }
+            var task = await _context.Tasks.FindAsync(id);
 
             if (task == null)
             {
-                return null;
+                return NotFound();
             }
 
             return task;
         }
 
-        [HttpPost]
-        public async void PostTask()
+        // PUT: api/Tasks/5
+        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutTask(int id, Models.Task task)
         {
+            if (id != task.TaskId)
+            {
+                return BadRequest();
+            }
 
-           var task = await HttpContext.Request.ReadFromJsonAsync<Models.Task>();
+            _context.Entry(task).State = EntityState.Modified;
 
-           SqlCreateTask(task);
-
-        }
-
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteTask(long id) 
-        {
-            SqlDeleteTask(id);
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!TaskExists(id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
 
             return NoContent();
         }
 
-        private void SqlCreateTask(Models.Task task)
+        // POST: api/Tasks
+        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [HttpPost]
+        public async Task<ActionResult<Models.Task>> PostTask(Models.Task task)
         {
-            string name = task.Name;
-            string message = task.Message;
-            string status = task.Status;
-            string type = task.Type;
-            string trace = task.Trace;
+          if (_context.Tasks == null)
+          {
+              return Problem("Entity set 'TaskContext.Tasks'  is null.");
+          }
+            _context.Tasks.Add(task);
+            await _context.SaveChangesAsync();
 
-            using (var connection = new SqlConnection(_configuration.GetConnectionString("TaskDatabase")))
-            {
-                var sql = "INSERT INTO task (name, message, status, type, trace) VALUES (@name, @message, @status, @type, @trace)";
-                using (SqlCommand command = new SqlCommand(sql))
-                {
-                    command.Parameters.AddWithValue("@name", name);
-                    command.Parameters.AddWithValue("@message", message);
-                    command.Parameters.AddWithValue("@status", status);
-                    command.Parameters.AddWithValue("@type", type);
-                    command.Parameters.AddWithValue("@trace", trace);
-                    command.Connection = connection;
-                    connection.Open();
-                    command.ExecuteNonQuery();
-                    connection.Close();
-                }
-            }
+            return CreatedAtAction("GetTask", new { id = task.TaskId }, task);
         }
 
-        private void SqlDeleteTask(long id)
+        // DELETE: api/Tasks/5
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteTask(int id)
         {
-            using (var connection = new SqlConnection(_configuration.GetConnectionString("TaskDatabase")))
+            if (_context.Tasks == null)
             {
-                Models.Task task = null;
-
-                var sql = "DELETE task WHERE id = @id";
-                using (SqlCommand command = new SqlCommand(sql))
-                {
-                    command.Parameters.AddWithValue("@id", id);
-                    command.Connection = connection;
-                    connection.Open();
-                    command.ExecuteNonQuery();
-                    connection.Close();
-                }
+                return NotFound();
             }
-        }
-
-        private IEnumerable<Models.Task> SqlGetTasks()
-        {
-            var tasks = new List<Models.Task>();
-            using (var connection = new SqlConnection(_configuration.GetConnectionString("TaskDatabase")))
+            var task = await _context.Tasks.FindAsync(id);
+            if (task == null)
             {
-                var sql = "SELECT id, name, message, status, type, trace FROM task";
-                connection.Open();
-                using SqlCommand command = new SqlCommand(sql, connection);
-                using SqlDataReader reader = command.ExecuteReader();
-                while (reader.Read())
-                {
-                    var task = new Models.Task()
-                    {
-                        Id = (long)reader["id"],
-                        Name = reader["name"].ToString(),
-                        Message = reader["message"].ToString(),
-                        Status = reader["status"].ToString(),
-                        Type = reader["type"].ToString(),
-                        Trace = reader["trace"].ToString(),
-                    };
-                    tasks.Add(task);
-                }
-            }
-            return tasks;
-        }
-
-        private Models.Task SqlGetTask(long id)
-        {
-            Models.Task task = null;
-
-            using (var connection = new SqlConnection(_configuration.GetConnectionString("TaskDatabase")))
-            {
-                var sql = "SELECT id, name, message, status, type, trace FROM task WHERE id = " + id;
-                connection.Open();
-                using SqlCommand command = new SqlCommand(sql, connection);
-                using SqlDataReader reader = command.ExecuteReader();
-                while (reader.Read())
-                {
-                    task = new Models.Task()
-                    {
-                        Id = (long)reader["id"],
-                        Name = reader["name"].ToString(),
-                        Message = reader["message"].ToString(),
-                        Status = reader["status"].ToString(),
-                        Type = reader["type"].ToString(),
-                        Trace = reader["trace"].ToString(),
-                    };
-                }
+                return NotFound();
             }
 
-            return task;
+            _context.Tasks.Remove(task);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
         }
 
+        private bool TaskExists(int id)
+        {
+            return (_context.Tasks?.Any(e => e.TaskId == id)).GetValueOrDefault();
+        }
     }
 }
